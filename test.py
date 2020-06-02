@@ -1,9 +1,10 @@
 import string;
-from math import sqrt;
+from math import sqrt, cos, pi;
 from os import system as cmd;
 from flask import Flask, render_template, request;
 import sys;
 import re;
+import json;
 dataTable = None;
 TT_INT = 'INT'
 TT_FLOAT  = 'FLOAT'
@@ -14,6 +15,7 @@ TT_MUL = 'MUL'
 TT_DIV = 'DIV'
 TT_LPAREN = 'LPAREN'
 TT_RPAREN = 'RPAREN'
+TT_QUOTE = "QUOTE";
 TT_POW = 'POW'
 TT_FACTO = 'FACTORIAL'
 TT_EOF = "EOF"
@@ -24,7 +26,9 @@ TT_KEYWORD = "KEYWORD"
 functions = [
     "sqrt",
     "sin",
-    "cos"
+    "cos",
+    "clear",
+    "print"
 ]
 keywords = [
     "VAR"
@@ -41,9 +45,11 @@ dictOfSpecTypes = {
     '^': TT_POW,
     '!': TT_FACTO,
     '=': TT_EQ,
-    '|': TT_CONT
+    ';': TT_CONT,
+    '"': TT_QUOTE
 }
-def clear(): cmd('cls');
+def clear(): cmd("cls");
+def rad(n): return pi*n/180;
 DIGITS = "0123456789"
 LETTERS = string.ascii_letters
 ALPHANUMERIC = LETTERS + DIGITS
@@ -70,7 +76,7 @@ class Lexer:
         tokens = [];
         while self.currentChar != None:
             c = self.currentChar;
-            if c in ' \t\n\r':
+            if c in ' \t\n':
                 self.advance();
             elif c in dictOfSpecTypes.keys():
                 self.advance();
@@ -99,12 +105,15 @@ class Lexer:
         return Token(TT_FLOAT,float(num_str));
     def makeIdToken(self):
         string = "";
-        while self.currentChar is not None and self.currentChar not in ' \t\n\r' and self.currentChar in ALPHANUMERIC:
+        while self.currentChar is not None and self.currentChar not in ' \t\n' and self.currentChar in ALPHANUMERIC:
             string += self.currentChar;
             self.advance();
         if string in keywords:
             return Token(TT_KEYWORD,string);
         return Token(TT_IDENTIFIER,string);
+########################################
+# Nodes
+########################################
 class NumberNode:
     def __init__(self,val_tok):
         self.valTok = val_tok;
@@ -124,11 +133,14 @@ class BinaryOpNode:
         self.opTok = op_tok;
     def __repr__(self):
         return f"({self.left},{self.opTok},{self.right})";
-class IdNode:
-    def __init__(self,id_tok):
-        self.valTok = id_tok;
+class PrintNode:
+    def __init__(self, node):
+        self.node = node;
     def __repr__(self):
-        return self.valTok;
+        return f"PRINT:{self.node}";
+########################################
+# VARIABLES
+########################################
 class VarAssignNode:
     def __init__(self, id_tok, value_node):
         self.tok = id_tok;
@@ -152,6 +164,9 @@ class Datatable:
         for i in self.map.keys():
             t.append(f"{i}:{self.map[i]}");
         return "\r\n".join(t);
+########################################
+# OTHER STUFF
+########################################
 class Parser:
     def __init__(self,tokens):
         self.tokens = tokens;
@@ -167,7 +182,7 @@ class Parser:
         if self.currentToken.type not in (TT_EOF,TT_CONT):
             return "Unexpected EOF";
         elif self.currentToken.type == TT_EOF:
-            return tree if len(tree) > 1 else tree[0];
+            return tree;
         self.advance();
         return self.parse(tree);
     def binopnode(self,left_func,tokens,right_func=None):
@@ -182,14 +197,23 @@ class Parser:
         return left;
     ###########################################
     def one(self):
-        if self.currentToken.type == TT_KEYWORD and self.currentToken.value == "VAR":
-            self.advance();
-            if self.currentToken.type == TT_IDENTIFIER:
-                tok = self.currentToken;
+        if self.currentToken.type == TT_KEYWORD:
+            if self.currentToken.value == "VAR":
                 self.advance();
-                if self.currentToken.type == TT_EQ:
+                if self.currentToken.type == TT_IDENTIFIER:
+                    tok = self.currentToken;
                     self.advance();
-                    return VarAssignNode(tok,self.one());
+                    if self.currentToken.type == TT_EQ:
+                        self.advance();
+                        return VarAssignNode(tok,self.one());
+            elif self.currentToken.value == "print":
+                self.advance();
+                if self.currentToken.type ==  TT_LPAREN:
+                    self.advance();
+                    expr = self.one();
+                    if self.currentToken.type == TT_RPAREN:
+                        self.advance();
+                        return PrintNode(expr);
         return self.binopnode(self.two,(TT_PLUS,TT_MINUS));
     def two(self):
         return self.binopnode(self.three,(TT_MUL,TT_DIV));
@@ -199,9 +223,6 @@ class Parser:
             self.advance();
             factor = self.three();
             return UnaryOpNode(tok,factor);
-        return self.four();
-    def four(self):
-        tok = self.currentToken;
         global functions;
         if tok.type == TT_KEYWORD and tok.value in functions:
             self.advance();
@@ -211,6 +232,8 @@ class Parser:
                 if self.currentToken.type == TT_RPAREN:
                     self.advance()
                     return UnaryOpNode(tok,expr);
+        return self.four();
+    def four(self):
         return self.binopnode(self.five,(TT_POW,),self.three);
     def five(self):
         node = self.six();
@@ -243,6 +266,7 @@ class Interpreter:
     def __init__(self, source, script):
         self.source = source;
         self.rootNode = script;
+        self.displayOutput = [];
     def interpret(self):
         return self.visit(self.rootNode);
     def visit(self,node):
@@ -263,8 +287,11 @@ class Interpreter:
             return number;
         ####
         elif operator.type == TT_KEYWORD:
-            if operator.value == "sqrt":
-                return number.sqrt();
+            if operator.value == "clear":
+                cmd("cls");
+                return None;
+            else:
+                return getattr(number,operator.value,number.invalid_method)();
     def visit_BinaryOpNode(self,node):
         operator = node.opTok;
         left = self.visit(node.left);
@@ -287,6 +314,9 @@ class Interpreter:
     def visit_VarAccessNode(self,node):
         global dataTable;
         return self.visit(dataTable.get(node));
+    ########################################
+    def visit_PrintNode(self,node):
+        self.displayOutput.append(self.visit(node.node));
 class Simplifier:
     def __init__(self,ast):
         self.ast = ast;
@@ -310,9 +340,9 @@ class Simplifier:
             return BinaryOpNode(node.left,node.opTok,self.update(node.right));
         elif right_invalid:
             return BinaryOpNode(self.update(node.left),node.opTok,node.right);
-####################
+########################################
 # VALUES
-####################
+########################################
 class Number:
     def __init__(self,value):
         self.value = value;
@@ -340,9 +370,19 @@ class Number:
         return Number(nVal);
     def sqrt(self):
         return Number(sqrt(self.value));
+    def cos(self):
+        global mode;
+        if mode == "RAD":
+            return Number(cos(self.value));
+        else:
+            return Number(cos(rad(self.value)));
+    ########################################
+    def invalid_method(self):
+        print("Invalid method being applied to number");
+        return None;
     def __repr__(self):
         return f"{self.value}";
-def run(fn, fl):
+def debug(fn, fl):
     global dataTable;
     if not dataTable:
         dataTable = Datatable();
@@ -350,30 +390,48 @@ def run(fn, fl):
     #Make '|' equal to TT_EOF but keep looping until TT_EOF is reached
     lexer = Lexer(fl, fn);
     tokens, error = lexer.lex();
-    print(f"Tokens: {tokens}");
+    if error:
+        print(f"Error: {error}");
+    else:
+        print(f"Token: {tokens}");
     parser = Parser(tokens);
-    ast = parser.parse();
-    if isinstance(ast,list):
-        pass
-    print(f"AST: {ast}");
-    interpreter = Interpreter("Test",ast);
-    out = interpreter.interpret();
-    print("Output:",out);
-    print("Datatable:",dataTable);
+    ast = parser.parse([]);
+    out = [];
+    for tree in ast:
+        if tree is None: continue;
+        interpreter = Interpreter(fn,tree);
+        out.append(interpreter.interpret());
+    if out[0] is not None:
+        print("Output:",out);
+        print("Datatable:",dataTable);
+def run(fn, fl):
+    global dataTable;
+    if not dataTable:
+        dataTable = Datatable();
+    tokens, error = Lexer(fl, fn).lex();
+    if error: print(f"Error: {error}");
+    ast = Parser(tokens).parse([]);
+    out = [];
+    output = [];
+    for tree in ast:
+        if tree is None: continue;
+        interpreter = Interpreter(fn,tree);
+        out.append(interpreter.interpret());
+        output += interpreter.displayOutput;
+    if len(output)>0: return "\n".join([str(vl) for vl in output]);
 def readFile(filename):
     return open(filename,'r').read();
 app = Flask("app");
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        run("Website", request.form["input"]);
-        return request.form["input"]
+        return json.dumps({"body":run("website",request.json)});
     return render_template("index.html");
 if __name__ == "__main__":
-    if sys.argv[1]:
+    if len(sys.argv) > 1:
         if sys.argv[1].split(r".")[1] != "cusm":
             print("Invalid file type");
             sys.exit(1);
         run(sys.argv[1],readFile(sys.argv[1]))
     else:
-        app.run(port=80, host="127.0.0.1");
+        app.run(port=80, host="127.0.0.1", debug=True);
