@@ -23,7 +23,6 @@ TT_CONT = "CONT"
 TT_EQ = "EQ"
 TT_IDENTIFIER = "IDENTIFIER"
 TT_KEYWORD = "KEYWORD"
-TT_STRING = "STRING"
 functions = [
     "sqrt",
     "sin",
@@ -46,14 +45,14 @@ dictOfSpecTypes = {
     '^': TT_POW,
     '!': TT_FACTO,
     '=': TT_EQ,
-    ';': TT_CONT
+    ';': TT_CONT,
+    '"': TT_QUOTE
 }
 def clear(): cmd("cls");
 def rad(n): return pi*n/180;
 DIGITS = "0123456789"
 LETTERS = string.ascii_letters
 ALPHANUMERIC = LETTERS + DIGITS
-CHARACTERS = ALPHANUMERIC+' ._,-/:';
 class Token:
     def __init__(self,type,value=None):
         self.type = type;
@@ -84,9 +83,6 @@ class Lexer:
                 tokens.append(Token(dictOfSpecTypes[c]));
             elif c in DIGITS:
                 tokens.append(self.makeNumberToken());
-            elif c == r'"':
-                self.advance();
-                tokens.append(self.makeStringToken());
             elif c in LETTERS:
                 tokens.append(self.makeIdToken());
             else:
@@ -107,16 +103,6 @@ class Lexer:
         if dp == 0:
             return Token(TT_INT,int(num_str));
         return Token(TT_FLOAT,float(num_str));
-    def makeStringToken(self):
-        string = "";
-        while self.currentChar is not None and self.currentChar not in '\t\n' and self.currentChar in CHARACTERS:
-            string += self.currentChar;
-            self.advance();
-        if self.currentChar == r'"':
-            self.advance();
-            return Token(TT_STRING,string);
-        else:
-            print("ERROR UNTERMINATED STRING");
     def makeIdToken(self):
         string = "";
         while self.currentChar is not None and self.currentChar not in ' \t\n' and self.currentChar in ALPHANUMERIC:
@@ -128,12 +114,6 @@ class Lexer:
 ########################################
 # Nodes
 ########################################
-class StringNode:
-    def __init__(self, val_tok):
-        self.tok = val_tok;
-        self.value = val_tok.value;
-    def __repr__(self):
-        return f"\"{self.value}\""
 class NumberNode:
     def __init__(self,val_tok):
         self.valTok = val_tok;
@@ -276,9 +256,6 @@ class Parser:
                 return expr;
             else:
                 print("Error no right parenthesis found");
-        elif tok.type == TT_STRING:
-            self.advance();
-            return StringNode(tok);
         elif tok.type == TT_IDENTIFIER:
             self.advance();
             return VarAccessNode(tok);
@@ -297,12 +274,8 @@ class Interpreter:
     def no_visit_method(self,node):
         print(f"No visit method defined for node of type {type(node).__name__}");
         return None;
-    ########################################
     def visit_NumberNode(self,node):
         return Number(node.value);
-    def visit_StringNode(self,node):
-        return String(node.value);
-    ########################################
     def visit_UnaryOpNode(self,node):
         operator = node.opTok;
         number = self.visit(node.node);
@@ -409,14 +382,6 @@ class Number:
         return None;
     def __repr__(self):
         return f"{self.value}";
-class String:
-    def __init__(self, value):
-        self.value = value;
-    def __repr__(self):
-        return f"{self.value}";
-########################################
-# RUNNING
-########################################
 def debug(fn, fl):
     global dataTable;
     if not dataTable:
@@ -431,32 +396,14 @@ def debug(fn, fl):
         print(f"Token: {tokens}");
     parser = Parser(tokens);
     ast = parser.parse([]);
-    print(ast);
     out = [];
-    output = [];
     for tree in ast:
         if tree is None: continue;
         interpreter = Interpreter(fn,tree);
         out.append(interpreter.interpret());
-        output += interpreter.displayOutput;
-    print("Datatable:",dataTable);
-    if len(output)>0: return "\n".join([str(vl) for vl in output]);
-def console(fn,fl):
-    global dataTable;
-    if not dataTable:
-        dataTable = Datatable();
-    lexer = Lexer(fl, fn);
-    tokens, error = lexer.lex();
-    parser = Parser(tokens);
-    ast = parser.parse([]);
-    out = [];
-    output = [];
-    for tree in ast:
-        if tree is None: continue;
-        interpreter = Interpreter(fn,tree);
-        out.append(interpreter.interpret());
-        output += interpreter.displayOutput;
-    if len(output)>0: print("\n".join([str(vl) for vl in output]));
+    if out[0] is not None:
+        print("Output:",out);
+        print("Datatable:",dataTable);
 def run(fn, fl):
     global dataTable;
     if not dataTable:
@@ -478,15 +425,13 @@ app = Flask("app");
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        global dataTable;
-        dataTable = None;
-        return json.dumps({"body":debug("website",request.json)});
+        return json.dumps({"body":run("website",request.json)});
     return render_template("index.html");
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         if sys.argv[1].split(r".")[1] != "cusm":
             print("Invalid file type");
             sys.exit(1);
-        console(sys.argv[1],readFile(sys.argv[1]))
+        run(sys.argv[1],readFile(sys.argv[1]))
     else:
         app.run(port=80, host="127.0.0.1", debug=True);
