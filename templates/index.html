@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Homepage</title>
+    <style media="screen">
+      input[type=submit]{
+        position: relative;
+        top: 20px;
+        left: 100px;
+      }
+      textarea#output{
+        resize: none;
+      }
+      textarea#input{
+        resize: vertical;
+        min-height: 200px;
+      }
+    </style>
+    <script type="text/javascript">
+      const $ = id => document.getElementById(id);
+      window.addEventListener("load",function(){
+        $("input").value = `VAR x1 = 4;
+VAR y1 = -1;
+print("Point 1 is 4, -1");
+VAR x2 = 7;
+VAR y2 = 3;
+print("Point 2 is 7, 3");
+print("Distance b/w 1 and 2 is:");
+print(sqrt((x2-x1)^2+(y2-y1)^2));`;
+        $("submit").addEventListener("click", async function(e){
+          raw = await fetch('.',{
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(document.getElementById("input").value)
+          });
+          res = await raw.json();
+          output.value = res.body;
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <textarea id="input" rows="8" cols="80" spellcheck="false"></textarea><input type="submit" id='submit' value="Run">
+    <hr>
+    <textarea id="output" rows="8" cols="80" disabled></textarea>
+  </body>
+</html>

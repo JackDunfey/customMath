@@ -53,7 +53,7 @@ def rad(n): return pi*n/180;
 DIGITS = "0123456789"
 LETTERS = string.ascii_letters
 ALPHANUMERIC = LETTERS + DIGITS
-CHARACTERS = ALPHANUMERIC+' ._,-/:';
+CHARACTERS = ALPHANUMERIC+' ._,-/:;\\';
 class Token:
     def __init__(self,type,value=None):
         self.type = type;
@@ -126,7 +126,7 @@ class Lexer:
             return Token(TT_KEYWORD,string);
         return Token(TT_IDENTIFIER,string);
 ########################################
-# Nodes
+# VALUE NODES
 ########################################
 class StringNode:
     def __init__(self, val_tok):
@@ -140,6 +140,9 @@ class NumberNode:
         self.value = val_tok.value;
     def __repr__(self):
         return f"{self.value}";
+########################################
+# OPERATION NODES
+########################################
 class UnaryOpNode:
     def __init__(self,op_tok,numNode):
         self.opTok = op_tok;
@@ -159,7 +162,7 @@ class PrintNode:
     def __repr__(self):
         return f"PRINT:{self.node}";
 ########################################
-# VARIABLES
+# VARIABLE NODES
 ########################################
 class VarAssignNode:
     def __init__(self, id_tok, value_node):
@@ -324,13 +327,13 @@ class Interpreter:
         left = self.visit(node.left);
         right = self.visit(node.right);
         if operator.type == TT_PLUS:
-            return left.sumWith(right);
+            return left.add(right);
         elif operator.type == TT_MINUS:
-            return left.subWith(right);
+            return left.subtract(right);
         elif operator.type == TT_MUL:
-            return left.mulWith(right);
+            return left.multiply(right);
         elif operator.type == TT_DIV:
-            return left.divWith(right);
+            return left.divide(right);
         elif operator.type == TT_POW:
             return left.pow(right);
     ########################################
@@ -374,16 +377,16 @@ class Number:
     def __init__(self,value):
         self.value = value;
     #Binary
-    def sumWith(self,other):
+    def add(self,other):
         if isinstance(other,Number):
             return Number(self.value+other.value);
-    def subWith(self,other):
+    def subtract(self,other):
         if isinstance(other,Number):
             return Number(self.value-other.value);
-    def mulWith(self,other):
+    def multiply(self,other):
         if isinstance(other,Number):
             return Number(self.value*other.value);
-    def divWith(self,other):
+    def divide(self,other):
         if isinstance(other,Number):
             return Number(self.value/other.value);
     def pow(self,other):
@@ -412,6 +415,14 @@ class Number:
 class String:
     def __init__(self, value):
         self.value = value;
+    def add(self, other):
+        if isinstance(other, String):
+            return String(self.value+other.value);
+        else:
+            return String(self.value+str(other.value));
+    def multiply(self, other):
+        if isinstance(other, Number):
+            return String(self.value*other.value);
     def __repr__(self):
         return f"{self.value}";
 ########################################
