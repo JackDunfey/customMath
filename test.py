@@ -310,7 +310,7 @@ class Interpreter:
         operator = node.opTok;
         number = self.visit(node.node);
         if operator.type == TT_MINUS:
-            return number.mulWith(Number(-1));
+            return number.multiply(Number(-1));
         elif operator.type == TT_FACTO:
             return number.factorial();
         elif operator.type == TT_PLUS:
